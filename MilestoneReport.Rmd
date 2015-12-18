@@ -1,0 +1,175 @@
+---
+title: "Milestone Project for Coursera Data Science Specialization"
+author: "Manil Wagle"
+date: "December 25, 2015"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction
+
+This project is part of coursera data science specialization capstone course. The report aims to conduct and present findings of some of the basic exploratory analysis conducted on the data that was provided through SwiftKey. The overall goal of the project is to develop an application that can predict the next word that the user is likely to type to complete the sentence. The datasets provided for the project consists of 3 different text files namely (news, blogs and twitter). The exploratory analysis focuses on these three files. The report can be boken down into 5 parts: Data Collection, Data Pre Summary, Tokenization, Exploratory Analysis and Conclusions. Finally some of the consideration for the development of application will be highlighted.This report will present Some of the codes while some are summarized keeping in mind the space limitations. For detail codes on the project, please visit my github repository <https://github.com/manilwagle/DataScienceMilestoneProject>.
+
+# Data Collection
+
+The data were downloaded from the link that was provided through course website https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip. Once the data was downloaded, it was the unzipped to extract the English database as a corpus. 
+
+
+# Data Pre-Summary
+
+This section presents some of the summary findings about the data we are dealing with.
+
+```{r echo = F,cache=TRUE, message=FALSE}
+library(knitr)
+library(tm)
+library(R.utils)
+library(stringi)
+library(wordcloud)
+destination=setwd("C:/Users/Manil/Desktop/Capstone/Capstone-master_v01")
+dir(destination)
+subfile=Corpus(DirSource(destination))
+summary(subfile)
+object.size(subfile)
+object.size(subfile[1])
+object.size(subfile[2])
+object.size(subfile[3])
+blog.path=paste(destination,"en_US.blogs.txt",sep="/")
+news.path=paste(destination,"en_US.news.txt",sep="/")
+twit.path=paste(destination,"en_US.twitter.txt",sep="/")
+blog.lines=readLines(blog.path,encoding="UTF-8",warn=FALSE)
+news.lines=readLines(news.path,encoding="UTF-8",warn=FALSE)
+twit.lines=readLines(twit.path,encoding="UTF-8",warn=FALSE)
+countLines(blog.path)
+countLines(twit.path)
+blog.words=stri_count_words(blog.lines)
+news.words=stri_count_words(news.lines)
+twit.words=stri_count_words(twit.lines)
+blog.chars=stri_length(blog.lines)
+news.chars=stri_length(news.lines)
+twit.chars=stri_length(twit.lines)
+summary(blog.words)
+summary(news.words)
+summary(twit.words)
+summary(blog.chars)
+summary(news.chars)
+summary(twit.chars)
+#twitter = paste(destination, "en_US.twitter.txt",intern = T, sep="/")
+#news <- paste(destination, "en_US.news.txt",intern = T, sep="/")
+#blogs <- paste(destination, "en_US.blogs.txt",intern = T, sep="/")
+#ten <-suppressWarnings(as.numeric(grep('[[:digit:]]', unlist(strsplit(twitter," ")), value = T)))
+#nen <-suppressWarnings (as.numeric(grep('[[:digit:]]', unlist(strsplit(news," ")), value = T)))
+#ben <- suppressWarnings (as.numeric(grep('[[:digit:]]', unlist(strsplit(blogs," ")), value = T)))
+#en <- as.data.frame(rbind(ten,nen,ben))
+#rownames(en) <- c('twitter','news','blogs')
+#colnames(en) <- c('line counts','word counts','size')
+#kable(en, align='c', caption = "Summary of the datasets")
+```
+
+- There are 2360148 line counts in twitter, with 30373603 word counts and the document size is 166816544. There are also lots of informal characters and less grammar resulting in more noise in twitter datasets.
+- There are 1010242 line counts in news, with 34372530 word counts and the document size is 205243643. Most of the writing in the news seems to be formal with topics highly focused
+- There are 899288 line counts in blogs, with 37334147 word counts and the document size is 208623081. There seems to be less noise and more topics in the blogs
+- Based on the average length of each lines in the files used fo rthis report: blog,news & twitter, it was decided to use blog for the pupose of building the model as it the longest longest document class and longer document are more likely to help to build a better model for prediction
+
+As discussed in the introduction section of this report, using all these three large files might increase the calculation and overall model building phase, so it was decided to sample  30,000 20,000 and 10,000 lines with seed from the blogs, news and twitter files to trainthe model and the remaining data would be used to sample to create test datasets.
+
+```{r echo = F,cache=TRUE,warning=FALSE}
+library(tm)
+library(stringi)
+ent <- readLines("C:/Users/Manil/Desktop/Capstone/Capstone-master_v01/en_US.twitter.txt", encoding = 'UTF-8', warn=FALSE)
+enn <- readLines("C:/Users/Manil/Desktop/Capstone/Capstone-master_v01//en_US.news.txt", encoding = 'UTF-8',warn=FALSE)
+enb <- readLines("C:/Users/Manil/Desktop/Capstone/Capstone-master_v01/en_US.blogs.txt", encoding = 'UTF-8',warn=FALSE)
+set.seed(1)
+subent <- ent[sample(1:length(ent),10000)]
+set.seed(1)
+subenn <- enn[sample(1:length(enn),20000)]
+set.seed(1)
+subenb <- enb[sample(1:length(enb),30000)]
+suben <- c(subent,subenn,subenb)
+rm(enb,enn,ent,subenb,subenn,subent)
+```
+
+# Tokenization
+
+Tokenization plays a vital role in cleansing the data, i.e it helps us to remove the meaningless characters and the words with low frequency in the corpus. This will help us create the work or n-gram with a high frequency. This sort of analysis are really meaningful when we are trying to explore the relationship between the words and a statistically significant predictive model. Some of the steps taken to accomplish this tasks are;
+
+- The ASCII characters
+- changing the capital characters to lower case letters 
+- Removing the punctuation, numbers and stop words from the corpus
+- Stemming the left words. 
+- The terms that occured less than ten times in terms of frequency were also removed to reduce the spares 
+
+```{r echo=F,cache=TRUE, warning=FALSE}
+ascllen <- stri_enc_toascii(suben)
+ascllen <- stri_replace_all_regex(ascllen,'\032','')
+en <- Corpus(VectorSource(ascllen))
+
+enall <- tm_map(en, content_transformer(tolower))
+enall <- tm_map(enall, removePunctuation)
+enall <- tm_map(enall, removeNumbers)
+enall <- tm_map(enall, removeWords, stopwords("english"))
+enall <- tm_map(enall, stemDocument,language = ("english"))
+enall <- tm_map(enall, stripWhitespace)
+
+# url <- 'http://www-personal.umich.edu/~jlawler/wordlist'
+# dic <- download.file(url,'data/dic.txt', method = 'curl')
+# dic <- readLines('data/dic.txt', encoding = 'UTF-8')
+
+ctrl <- list(tokenize = words, bounds = list(global = c(10,Inf)))
+
+options(mc.cores=1)
+
+BigramTokenizer <- function(x) {RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 2, max = 2))}
+ctrl2 <- list(tokenize = BigramTokenizer, bounds = list(global = c(10,Inf)))
+
+TrigramTokenizer <- function(x) {RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 3, max = 3))}
+ctrl3 <- list(tokenize = TrigramTokenizer, bounds = list(global = c(10,Inf)))
+
+# TeragramTokenizer <- function(x) {RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 4, max = 4))}
+# ctrl4 <- list(tokenize = TeragramTokenizer, bounds = list(global = c(10,Inf)))
+
+Tokenizer <- function(x) {RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 1, max = 3))}
+ctrl0 <- list(tokenize = Tokenizer, bounds = list(global = c(10,Inf)))
+
+library(slam)
+en.tdm <- TermDocumentMatrix(enall,control = ctrl)
+en.bitdm <- TermDocumentMatrix(enall,control = ctrl2)
+en.tritdm <- TermDocumentMatrix(enall,control = ctrl3)
+# en.teratdm <- TermDocumentMatrix(enall,control = ctrl4)
+en.tdm0 <- TermDocumentMatrix(enall,control = ctrl0)
+
+freq <- rowapply_simple_triplet_matrix(en.tdm,sum)
+freqbi <- rowapply_simple_triplet_matrix(en.bitdm,sum)
+freqtri <- rowapply_simple_triplet_matrix(en.tritdm,sum)
+# freqtera <- rowapply_simple_triplet_matrix(en.teratdm,sum)
+freq0 <- rowapply_simple_triplet_matrix(en.tdm0,sum)
+```
+
+# Exploratory analysis
+
+'RWeka' package was used to build a n-gram model by extracting n-gram corpus. Some of the obseravations were;
+- The uni gram terms corpus has `r length(en.tdm$dimnames$Terms)` words
+- The bi gram corpus has `r length(en.bitdm$dimnames$Terms)` terms
+- the tri gram corpus has `r length(en.tritdm$dimnames$Terms)` terms. 
+
+Histograms were then created for uni gram corpus, bi gram corpus and tri gram corpus along with word cloud to explore the corpus further looking at their distributions. 
+
+It is easy to see that logged frequencies in all the three corpus are still skew to the left suggesting sparse in the data. Also, wordcloud suggests that terms occured more than 400 times suggesting that using the terms to build the classification filter model before using n-gram model will enhance the efficiency of the prediction greatly as a whole. 
+
+```{r,cache=TRUE,echo=FALSE,warning=FALSE,message=FALSE}
+par(oma=c(0,0,3,0),mfrow = c(2,2), mar=c(2,2,2,2))
+hist(log(freq), breaks = 50, main = 'uni gram corpus', xlab='the log value of the Frequency', ylab='')
+hist(log(freqbi), breaks = 50, main = 'bi gram corpus', xlab='the log value of the Frequency', ylab='')
+hist(log(freqtri), breaks = 50, main = 'tri gram corpus', xlab='the log value of the Frequency', ylab='')
+library(wordcloud)
+wordcloud(names(freq0), freq0, min.freq = 400)
+title("Figure 1: Histogram of term frequency and word cloud of all of the three corpus",outer=T)
+```
+
+# Conclusions
+
+Some of the takeaways from the exploratory analysis are listed below;
+- How will we predict next? Hierarchical local regression model might be good fit based on exploratory analysis.
+- What about removing of stop words. Semantic value influenced us to remove stop words but what happens when it is likely to be typed or desired by the users.
+
+This concludes the exploratory analysis and i will be starting to work towards building the Shinny Application the game of word prediction. Best effort would be used to come up with most accurate predictive application.
